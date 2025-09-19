@@ -251,7 +251,7 @@ router.post(
 
       const issueDate = dayjs().format("YYYY-MM-DD");
       const publicBase =
-        process.env.PUBLIC_BASE_URL || "https://yourdomain.com";
+        process.env.PUBLIC_BASE_URL || "https://zap-front.vercel.app";
       const createdBy = req.user?.id || null;
 
       const inserted = [];
