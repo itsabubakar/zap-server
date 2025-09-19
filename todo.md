@@ -1,0 +1,15 @@
+- [ ] Install PG locally
+- [ ] Create account for Zaptrance on supabase
+- [ ] Create tables locally
+- [ ] Push tables to supabase
+- [ ] Create role base auth flows
+- [ ] Start connecting apis to front end
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
