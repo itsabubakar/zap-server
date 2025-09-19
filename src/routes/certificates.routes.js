@@ -333,7 +333,7 @@ router.post(
 router.get(
   "/",
   requireAuth,
-  allowRoles("admin", "registrar"),
+  allowRoles("admin", "registrar", "staff"),
   async (req, res) => {
     const { page = "1", pageSize = "20", q = "" } = req.query;
     const from = (Number(page) - 1) * Number(pageSize);
@@ -444,7 +444,7 @@ router.get(
 router.get(
   "/home",
   requireAuth,
-  allowRoles("admin", "registrar"),
+  allowRoles("admin", "registrar", "staff"),
   async (req, res) => {
     try {
       const institution = req.user.institution; // 👈 from JWT
