@@ -251,14 +251,14 @@ router.post(
 
       const issueDate = dayjs().format("YYYY-MM-DD");
       const publicBase =
-        process.env.PUBLIC_BASE_URL || "https://zap-front.vercel.app";
+        process.env.PUBLIC_BASE_URL || "https://zap-server-z2ra.onrender.com";
       const createdBy = req.user?.id || null;
 
       const inserted = [];
 
       for (const row of rows) {
         const certificateId = uuidv4();
-        const verifyUrl = `${publicBase}/verify/${certificateId}`;
+        const verifyUrl = `${publicBase}/certificates/verify/${certificateId}`;
 
         const payload = {
           institution_name: institutionName,
@@ -481,5 +481,199 @@ router.get(
     }
   }
 );
+
+// PUBLIC: GET /verify/:certificateId
+router.get("/verify/:certificateId", async (req, res) => {
+  const code = (req.params.certificateId || "").trim();
+
+  // tiny HTML escaper to keep content safe
+  const esc = (s = "") =>
+    String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  try {
+    // pull cert + logo_url so we can show the school logo
+    const { data: cert, error } = await supabase
+      .from("certificates")
+      .select(
+        "full_name, program, certificate, cgpa, institution_name, created_at, pdf_url, pdf_path, certificate_id, status, logo_url"
+      )
+      .eq("certificate_id", code)
+      .single();
+
+    if (error || !cert) {
+      return res.status(404).type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Certificate not found</title>
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:#f8fafc;color:#0f172a}
+  .wrap{max-width:680px;margin:48px auto;padding:0 20px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 10px 30px rgba(2,6,23,.06);padding:24px}
+  .muted{color:#64748b}
+  .code{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0b1220;color:#e2e8f0;padding:6px 10px;border-radius:8px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 style="margin:0 0 8px">Certificate not found</h1>
+      <p class="muted">We couldn't find a certificate with code:</p>
+      <p><span class="code">${esc(code)}</span></p>
+    </div>
+  </div>
+</body>
+</html>`);
+    }
+
+    // choose a downloadable URL (public, or sign if private)
+    let downloadUrl = cert.pdf_url || null;
+    if (!downloadUrl && cert.pdf_path) {
+      const { data: signed } = await supabase.storage
+        .from("certificates")
+        .createSignedUrl(cert.pdf_path, 60); // 60s
+      downloadUrl = signed?.signedUrl || null;
+    }
+
+    const issued = new Date(cert.created_at);
+    const issuedStr = issued.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    return res.status(200).type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Certificate Verified · ${esc(cert.full_name)}</title>
+  <style>
+    :root { --brand:#2563eb; --ink:#0f172a; --muted:#64748b; --bg:#f8fafc; --card:#ffffff; --ring:#e5e7eb; --ok:#16a34a; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; color:var(--ink); background:
+      radial-gradient(1000px 500px at 20% -10%, rgba(37,99,235,.08), transparent 60%),
+      radial-gradient(800px 400px at 120% 0%, rgba(22,163,74,.08), transparent 60%),
+      var(--bg);
+    }
+    .wrap { max-width: 860px; margin: 48px auto; padding: 0 20px; }
+    .card { background:var(--card); border:1px solid var(--ring); border-radius:16px; box-shadow:0 10px 30px rgba(2,6,23,.06); overflow:hidden; }
+    .bar { display:flex; align-items:center; gap:14px; padding:18px 22px; background:linear-gradient(90deg, rgba(37,99,235,.08), rgba(22,163,74,.08)); border-bottom:1px solid var(--ring); }
+    .logo { width:44px; height:44px; border-radius:50%; overflow:hidden; border:1px solid var(--ring); background:#fff; flex:0 0 auto; }
+    .brand { font-weight:700; letter-spacing:.2px; }
+    .content { padding:26px 26px 18px; }
+    .titleRow { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .badge { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:rgba(22,163,74,.12); color:#065f46; font-weight:600; font-size:.85rem; }
+    .title { font-size:1.6rem; margin:0; }
+    .sub { color:var(--muted); margin:6px 0 0; }
+    .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:16px; margin:22px 0; }
+    @media (max-width:640px){ .grid{ grid-template-columns:1fr; } }
+    .item { padding:14px 16px; background:#fafafa; border:1px solid var(--ring); border-radius:12px; }
+    .label { display:block; font-size:.75rem; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); margin-bottom:4px; }
+    .value { font-weight:600; }
+    .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:10px; }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:10px; text-decoration:none; font-weight:600; border:1px solid transparent; }
+    .btn.primary { background:var(--brand); color:#fff; }
+    .btn.primary:hover { filter:brightness(.95); }
+    .btn.ghost { background:#f1f5f9; color:var(--ink); border-color:var(--ring); }
+    .btn.ghost:hover { background:#e2e8f0; }
+    .footer { padding:16px 22px 22px; color:var(--muted); font-size:.9rem; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--ring); flex-wrap:wrap; gap:8px; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#0b1220; color:#e2e8f0; padding:6px 10px; border-radius:8px; font-size:.9rem; }
+    .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#0b1220; color:#e2e8f0; padding:10px 14px; border-radius:10px; box-shadow:0 10px 30px rgba(2,6,23,.25); opacity:0; pointer-events:none; transition:opacity .25s ease; }
+    .toast.show { opacity:1; }
+    .okdot { width:8px; height:8px; background:var(--ok); border-radius:50%; box-shadow:0 0 0 3px rgba(22,163,74,.15); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="bar">
+        ${
+          cert.logo_url
+            ? `<div class="logo"><img src="${esc(
+                cert.logo_url
+              )}" alt="Logo" style="width:100%;height:100%;object-fit:cover"/></div>`
+            : ""
+        }
+        <div>
+          <div class="brand">${esc(cert.institution_name)}</div>
+          <div style="font-size:.85rem;color:var(--muted);">Official certificate verification</div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="titleRow">
+          <span class="badge"><span class="okdot"></span> Verified</span>
+          <h1 class="title">Certificate of ${esc(cert.certificate)}</h1>
+        </div>
+        <p class="sub">This certificate belongs to <strong>${esc(
+          cert.full_name
+        )}</strong>${cert.program ? ` — ${esc(cert.program)}` : ""}.</p>
+
+        <div class="grid">
+          <div class="item">
+            <span class="label">Student</span>
+            <span class="value">${esc(cert.full_name)}</span>
+          </div>
+          <div class="item">
+            <span class="label">Program</span>
+            <span class="value">${esc(cert.program || "—")}</span>
+          </div>
+          <div class="item">
+            <span class="label">CGPA</span>
+            <span class="value">${esc(cert.cgpa || "—")}</span>
+          </div>
+          <div class="item">
+            <span class="label">Issued</span>
+            <span class="value">${esc(issuedStr)}</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          ${
+            downloadUrl
+              ? `<a class="btn primary" href="${downloadUrl}" target="_blank" rel="noopener">Download PDF</a>`
+              : `<span class="btn ghost" aria-disabled="true">PDF unavailable</span>`
+          }
+          <button class="btn ghost" id="copyBtn" type="button">Copy Code</button>
+          
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>Certificate Code: <span class="code" id="codeEl">${esc(
+          cert.certificate_id
+        )}</span></div>
+        <div>Status: <strong style="color:var(--ok)">Valid</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Copied to clipboard</div>
+  <script>
+    (function () {
+      var btn = document.getElementById('copyBtn');
+      var codeEl = document.getElementById('codeEl');
+      var toast = document.getElementById('toast');
+      function showToast() { toast.classList.add('show'); setTimeout(function(){ toast.classList.remove('show'); }, 1200); }
+      if (btn && codeEl) {
+        btn.addEventListener('click', function() {
+          var code = codeEl.textContent || '';
+          navigator.clipboard.writeText(code).then(showToast).catch(showToast);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>`);
+  } catch (e) {
+    console.error("Verify error:", e);
+    return res.status(500).type("html").send("<h1>Server error</h1>");
+  }
+});
 
 export default router;
